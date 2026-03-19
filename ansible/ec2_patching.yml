@@ -1,0 +1,140 @@
+- name: Patch AWS Ubuntu VMs
+  hosts: all
+  remote_user: "{{ ansible_user | default('ubuntu') }}"
+  become: yes
+  become_method: sudo
+  gather_facts: no
+
+  vars:
+    apt_cache_valid_time: 3600
+    reboot_timeout: 600
+    patch_type: "{{ patch_type_input | default('security') }}"
+    reboot_allowed: "{{ reboot_allowed_input | default(false) }}"
+    ansible_ssh_common_args: >-
+      -o StrictHostKeyChecking=no
+      -o UserKnownHostsFile=/dev/null
+      -o ConnectTimeout=30
+      -o ServerAliveInterval=10
+      -o ServerAliveCountMax=6
+    ansible_become_exe: /usr/bin/sudo
+    ansible_become_flags: "-H -S -n"
+
+  pre_tasks:
+    - name: Wait for SSH port to be open
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        timeout: 300
+        delay: 5
+        state: started
+      delegate_to: localhost
+      become: no
+
+    - name: Wait for SSH connection to be usable
+      wait_for_connection:
+        connect_timeout: 20
+        timeout: 300
+        delay: 5
+        sleep: 10
+
+    - name: Gather facts
+      setup:
+
+    - name: Debug connection info
+      debug:
+        msg:
+          - "Connected to: {{ inventory_hostname }} ({{ ansible_host }})"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: "{{ apt_cache_valid_time }}"
+      register: apt_update
+      retries: 3
+      delay: 10
+      until: apt_update is succeeded
+
+    - name: Apply patches
+      apt:
+        upgrade: dist
+        update_cache: no
+        autoremove: yes
+        autoclean: yes
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      register: upgrade_result
+      retries: 2
+      delay: 30
+      until: upgrade_result is succeeded
+
+    - name: Check if reboot required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Parse upgraded packages
+      set_fact:
+        patched_packages: "{{ upgrade_result.stdout | regex_findall('Unpacking ([^\\s:]+)') | unique }}"
+
+    - name: Store per-host patch result
+      set_stats:
+        data:
+          patch_results: >-
+            {{ (patch_results | default([])) + [{
+              'host': inventory_hostname,
+              'ip': ansible_host,
+              'changed': upgrade_result.changed,
+              'package_count': patched_packages | length,
+              'packages': patched_packages,
+              'reboot_required': reboot_required.stat.exists
+            }] }}
+        aggregate: yes
+        per_host: no
+
+    - name: Reboot if required and allowed
+      reboot:
+        msg: "Reboot by Ansible patching"
+        reboot_timeout: "{{ reboot_timeout }}"
+        pre_reboot_delay: 5
+        post_reboot_delay: 30
+        test_command: uptime
+      when:
+        - reboot_required.stat.exists
+        - reboot_allowed | bool
+
+# Play 3: Summary
+- name: Patching summary
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Print per-host patch report
+      debug:
+        msg: >-
+          [{{ item.host }}] ({{ item.ip }})
+          | Patched: {{ item.changed }}
+          | Packages: {{ item.package_count }}
+          | Reboot required: {{ item.reboot_required }}
+          | {{ item.packages | join(', ') if item.changed else 'No changes' }}
+      loop: "{{ patch_results | default([]) }}"
+      loop_control:
+        label: "{{ item.host }}"
+
+    - name: Print overall summary
+      debug:
+        msg:
+          - "========================================"
+          - "         PATCH SUMMARY REPORT          "
+          - "========================================"
+          - "Environment  : {{ environment | default('unknown') }}"
+          - "Patch type   : {{ patch_type | default('security') }}"
+          - "Total VMs    : {{ patch_results | default([]) | length }}"
+          - "VMs patched  : {{ patch_results | default([]) | selectattr('changed', 'equalto', true) | list | length }}"
+          - "VMs unchanged: {{ patch_results | default([]) | selectattr('changed', 'equalto', false) | list | length }}"
+          - "Reboots needed: {{ patch_results | default([]) | selectattr('reboot_required', 'equalto', true) | list | length }}"
+          - "Total packages upgraded: {{ patch_results | default([]) | sum(attribute='package_count') }}"
+          - "========================================"
+          - "Total packages upgraded: {{ patch_results | default([]) | sum(attribute='package_count') }}"
+          - "========================================"

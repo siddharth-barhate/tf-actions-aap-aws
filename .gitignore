@@ -1,0 +1,33 @@
+# Local .terraform directories
+**/.terraform/*
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+*.backup
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# Terraform plans
+*.tfplan
+*.tfplan.*
+*.plan
+
+# CLI config files (often contain creds/tokens)
+.terraformrc
+terraform.rc
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Variable files (commonly contain secrets)
+*.tfvars
+*.tfvars.json
+
+# Keep your checked-in tfvars (remove this line if you *want* all tfvars ignored)
+!terraform.tfvars
