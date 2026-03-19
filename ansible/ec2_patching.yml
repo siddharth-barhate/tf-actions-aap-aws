@@ -1,5 +1,20 @@
+- name: Setup Vault SSH certificate
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Add VMs to dynamic inventory
+      add_host:
+        name: "{{ item.key }}"
+        groups: ec2_vms
+        ansible_host: "{{ item.value }}"
+        ansible_user: "{{ ansible_user | default('ubuntu') }}"
+      loop: "{{ vm_hosts | dict2items }}"
+      when: vm_hosts is defined
+
+
+
 - name: Patch AWS Ubuntu VMs
-  hosts: all
+  hosts: ec2_vms
   remote_user: "{{ ansible_user | default('ubuntu') }}"
   become: yes
   become_method: sudo
