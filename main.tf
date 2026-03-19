@@ -89,6 +89,15 @@ resource "aws_security_group" "instance" {
     cidr_blocks = [aws_vpc.this.cidr_block]
   }
 
+  ingress {
+    description      = "SSH from anywhere"
+    from_port        = 22
+    to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
   # Allow egress to anywhere (if you later add NAT/egress, instance can reach out)
   egress {
     description = "Allow all outbound"
