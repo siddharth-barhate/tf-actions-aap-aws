@@ -8,6 +8,9 @@
           - "vm_hosts type={{ vm_hosts | default(None) | type_debug }}"
           - "vm_hosts={{ vm_hosts | default('UNDEFINED') }}"
 
+    - name: Show all variables (optional)
+      debug:
+        var: vars
     - name: Fail if vm_hosts is missing
       assert:
         that:
