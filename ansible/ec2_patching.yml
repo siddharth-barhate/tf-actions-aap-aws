@@ -1,40 +1,13 @@
-- name: Setup Vault SSH certificate
+- name: Setup Dynamic Inventory
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Show incoming vm_hosts
-      debug:
-        msg:
-          - "vm_hosts type={{ vm_hosts | default(None) | type_debug }}"
-          - "vm_hosts={{ vm_hosts | default('UNDEFINED') }}"
-
-    - name: Show all variables (optional)
-      debug:
-        var: vars
     - name: Fail if vm_hosts is missing
       assert:
         that:
           - vm_hosts is defined
           - vm_hosts | string | length > 0
         fail_msg: "vm_hosts was not passed."
-    - name: Normalize vm_hosts into a dictionary
-      set_fact:
-        vm_hosts_normalized: >-
-          {% if vm_hosts is mapping %}
-          {{ vm_hosts }}
-          {% elif vm_hosts is string %}
-          {{ (vm_hosts | from_json) if (vm_hosts | trim | regex_search('^\\s*[{\\[]')) else {} }}
-          {% elif vm_hosts is sequence %}
-          {{ dict((vm_hosts | list) | zip(vm_hosts | list)) }}
-          {% else %}
-          {{}}
-          {% endif %}
-
-    - name: Fail if vm_hosts_normalized is empty
-      assert:
-        that:
-          - vm_hosts_normalized | length > 0
-        fail_msg: "No valid hosts found in vm_hosts. Pass a dict or JSON dict, e.g. {'vm1':'10.0.1.10'}."
 
     - name: Add VMs to dynamic inventory
       add_host:
@@ -42,15 +15,8 @@
         groups: ec2_vms
         ansible_host: "{{ item.value }}"
         ansible_user: "{{ ansible_user | default('ubuntu') }}"
-      loop: "{{ vm_hosts_normalized | dict2items }}"
-
-    - name: Fail early if dynamic group is empty
-      assert:
-        that:
-          - (groups['ec2_vms'] | default([]) | length) > 0
-        fail_msg: "No hosts were added to ec2_vms."
-
-
+      loop: "{{ vm_hosts | dict2items }}"
+      when: vm_hosts is defined
 
 - name: Patch AWS Ubuntu VMs
   hosts: ec2_vms
@@ -130,20 +96,22 @@
 
     - name: Parse upgraded packages
       set_fact:
-        patched_packages: >-
-          {{
-            (upgrade_result.stdout | default('') | regex_findall('Unpacking ([^\\s:]+)') | unique)
-          }}
+        patched_packages: "{{ upgrade_result.stdout | regex_findall('Unpacking ([^\\s:]+)') | unique }}"
 
     - name: Store per-host patch result
-      set_fact:
-        patch_result:
-          host: "{{ inventory_hostname }}"
-          ip: "{{ ansible_host }}"
-          changed: "{{ upgrade_result.changed | default(false) }}"
-          package_count: "{{ patched_packages | length }}"
-          packages: "{{ patched_packages }}"
-          reboot_required: "{{ reboot_required.stat.exists | default(false) }}"
+      set_stats:
+        data:
+          patch_results: >-
+            {{ (patch_results | default([])) + [{
+              'host': inventory_hostname,
+              'ip': ansible_host,
+              'changed': upgrade_result.changed,
+              'package_count': patched_packages | length,
+              'packages': patched_packages,
+              'reboot_required': reboot_required.stat.exists
+            }] }}
+        aggregate: yes
+        per_host: no
 
     - name: Reboot if required and allowed
       reboot:
@@ -155,46 +123,3 @@
       when:
         - reboot_required.stat.exists
         - reboot_allowed | bool
-
-# Play 3: Summary
-- name: Patching summary
-  hosts: localhost
-  gather_facts: no
-
-  tasks:
-    - name: Build consolidated patch_results from hostvars
-      set_fact:
-        patch_results: >-
-          {{
-            (groups['ec2_vms'] | default([]))
-            | map('extract', hostvars, 'patch_result')
-            | select('defined')
-            | list
-          }}
-
-    - name: Print per-host patch report
-      debug:
-        msg: >-
-          [{{ item.host }}] ({{ item.ip }})
-          | Patched: {{ item.changed }}
-          | Packages: {{ item.package_count }}
-          | Reboot required: {{ item.reboot_required }}
-          | {{ item.packages | join(', ') if item.changed else 'No changes' }}
-      loop: "{{ patch_results | default([]) }}"
-      loop_control:
-        label: "{{ item.host }}"
-
-    - name: Print overall summary
-      debug:
-        msg:
-          - "========================================"
-          - "         PATCH SUMMARY REPORT          "
-          - "========================================"
-          - "Environment  : {{ environment | default('unknown') }}"
-          - "Patch type   : {{ patch_type_input | default('security') }}"
-          - "Total VMs    : {{ patch_results | default([]) | length }}"
-          - "VMs patched  : {{ patch_results | default([]) | selectattr('changed', 'equalto', true) | list | length }}"
-          - "VMs unchanged: {{ patch_results | default([]) | selectattr('changed', 'equalto', false) | list | length }}"
-          - "Reboots needed: {{ patch_results | default([]) | selectattr('reboot_required', 'equalto', true) | list | length }}"
-          - "Total packages upgraded: {{ patch_results | default([]) | sum(attribute='package_count') }}"
-          - "========================================"

@@ -1,11 +1,9 @@
 output "vpc_id" {
-  value = aws_vpc.this.id
+  description = "ID of the created VPC."
+  value       = aws_vpc.this.id
 }
 
 output "instance_id" {
-  value = aws_instance.this[*].id
-}
-
-output "debug_extra_vars" {
-  value = local.extra_vars
+  description = "IDs of created EC2 instances."
+  value       = aws_instance.this[*].id
 }

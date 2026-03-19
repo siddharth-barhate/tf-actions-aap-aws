@@ -6,7 +6,7 @@ locals {
     # SSH user
     ansible_user   = var.ansible_user
     vault_ssh_user = var.ansible_user
-    
+
     # Patch config
     patch_type_input     = "security"
     reboot_allowed_input = false
@@ -24,7 +24,7 @@ action "aap_job_launch" "patch_vms" {
 }
 
 resource "terraform_data" "trigger_patch" {
-  count = var.aap_job_template_id > 0 ? 1 : 0
+  count      = var.aap_job_template_id > 0 ? 1 : 0
   depends_on = [aws_instance.this]
 
   input = {

@@ -118,9 +118,9 @@ resource "aws_iam_role" "ssm" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
+      Effect    = "Allow"
       Principal = { Service = "ec2.amazonaws.com" }
-      Action = "sts:AssumeRole"
+      Action    = "sts:AssumeRole"
     }]
   })
 }
@@ -137,14 +137,14 @@ resource "aws_iam_instance_profile" "ssm" {
 
 
 resource "aws_instance" "this" {
-  count                      = var.instance_count
-  ami                        = data.aws_ami.ubuntu_2204.id
-  instance_type              = var.instance_type
-  subnet_id                  = aws_subnet.public_a.id
-  vpc_security_group_ids     = [aws_security_group.instance.id]
+  count                       = var.instance_count
+  ami                         = data.aws_ami.ubuntu_2204.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.public_a.id
+  vpc_security_group_ids      = [aws_security_group.instance.id]
   associate_public_ip_address = true
-  iam_instance_profile       = aws_iam_instance_profile.ssm.name
-  key_name                   = var.key_pair_name
+  iam_instance_profile        = aws_iam_instance_profile.ssm.name
+  key_name                    = var.key_pair_name
 
   metadata_options {
     http_endpoint = "enabled"
@@ -155,7 +155,3 @@ resource "aws_instance" "this" {
     Name = "${var.name}-ec2-${count.index + 1}"
   }
 }
-
-
-
-
