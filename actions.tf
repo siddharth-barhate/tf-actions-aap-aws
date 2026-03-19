@@ -25,6 +25,7 @@ action "aap_job_launch" "patch_vms" {
 
 resource "terraform_data" "trigger_patch" {
   count = var.aap_job_template_id > 0 ? 1 : 0
+  depends_on = [aws_instance.this]
 
   input = {
     vm_ids = [for vm in aws_instance.this : vm.id]
