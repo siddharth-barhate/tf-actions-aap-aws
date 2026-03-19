@@ -2,6 +2,18 @@
   hosts: localhost
   gather_facts: no
   tasks:
+    - name: Show incoming vm_hosts
+      debug:
+        msg:
+          - "vm_hosts type={{ vm_hosts | default(None) | type_debug }}"
+          - "vm_hosts={{ vm_hosts | default('UNDEFINED') }}"
+
+    - name: Fail if vm_hosts is missing
+      assert:
+        that:
+          - vm_hosts is defined
+          - vm_hosts | string | length > 0
+        fail_msg: "vm_hosts was not passed."
     - name: Add VMs to dynamic inventory
       add_host:
         name: "{{ item.key }}"

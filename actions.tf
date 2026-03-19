@@ -8,8 +8,8 @@ locals {
     vault_ssh_user = var.ansible_user
     
     # Patch config
-    patch_type     = "security"
-    reboot_allowed = false
+    patch_type_input     = "security"
+    reboot_allowed_input = false
   }
 }
 
