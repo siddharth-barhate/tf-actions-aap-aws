@@ -36,7 +36,7 @@ variable "key_pair_name" {
 variable "instance_count" {
   description = "Number of EC2 instances to create."
   type        = number
-  default     = 5
+  default     = 2
 }
 
 variable "ubuntu_ami_name_glob" {
